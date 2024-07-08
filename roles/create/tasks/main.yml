@@ -1,0 +1,83 @@
+---
+# tasks file for create
+  - name: Gather information about all droplets
+    community.digitalocean.digital_ocean_droplet_info:
+      oauth_token: "{{ DO_API_TOKEN }}"
+    register: droplet_data
+
+  - name: Initialize create var to True
+    set_fact:
+      create: True
+
+  - name: Search for droplet
+    set_fact: 
+      create: False
+    loop: "{{ droplet_data['data'] }}"
+    when: item.name == 'code-droplet'
+
+  - block:
+      - name: set user data var
+        set_fact:
+          user_data_script: "{{ lookup('ansible.builtin.file', 'roles/create/files/user_data.sh') }}"
+
+      - name: Create droplet
+        community.digitalocean.digital_ocean_droplet:
+          state: present
+          oauth_token: "{{ DO_API_TOKEN }}"
+          name: code-droplet
+          size: s-1vcpu-1gb
+          region: sfo3
+          image: ubuntu-20-04-x64
+          wait_timeout: 500
+          ssh_keys: [ 'digital ocean ssh key var' ]
+          unique_name: true
+          user_data: "{{ user_data_script }}"
+        register: code_droplet
+
+      - name: set ip
+        set_fact:
+          droplet_ip: "{{ (code_droplet.data.droplet.networks.v4 | selectattr('type', 'equalto', 'public')).0.ip_address | default('<none>', true) }}"
+
+      - name: Ensure a Droplet is present and has firewall rules applied
+        community.digitalocean.digital_ocean_droplet:
+          state: present
+          oauth_token: "{{ DO_API_TOKEN }}"
+          id: "{{ code_droplet.data.droplet.id }}"
+          name: code-droplet
+          size: s-1vcpu-1gb
+          region: sfo3
+          image: ubuntu-20-04-x64
+          firewall: ['code-droplet']
+          wait_timeout: 500
+          
+      - name: Add host
+        ansible.builtin.add_host:
+          name: "{{ (code_droplet.data.droplet.networks.v4 | selectattr('type', 'equalto', 'public')).0.ip_address | default('<none>', true) }}"    
+          groups: "droplet"
+          ansible_user: "root"
+
+      - name: Wait for droplet to init
+        ansible.builtin.wait_for:
+          timeout: 240
+
+      - name: Fetch SSH host keys
+        command: "ssh-keyscan -H {{ (code_droplet.data.droplet.networks.v4 | selectattr('type', 'equalto', 'public')).0.ip_address | default('<none>', true) }}"
+        register: host_key
+
+      - name: Extract SSH host key
+        set_fact:
+          extracted_key: "{{ host_key.stdout | regex_replace('^.*\\s+', '') }}"
+
+      - name: Add host keys to known_hosts
+        known_hosts:
+          path: /home/goods/.ssh/known_hosts
+          name: "{{ (code_droplet.data.droplet.networks.v4 | selectattr('type', 'equalto', 'public')).0.ip_address | default('<none>', true) }}"
+          key: "{{ extracted_key }}"
+          state: present
+
+      - name: Set Droplet IP fact
+        set_fact:
+          ip: "{{ (code_droplet.data.droplet.networks.v4 | selectattr('type', 'equalto', 'public')).0.ip_address | default('<none>', true) }}"
+
+    when: create
+

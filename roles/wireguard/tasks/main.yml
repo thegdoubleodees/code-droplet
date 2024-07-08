@@ -1,0 +1,35 @@
+---
+# tasks file for wireguard
+
+- name: Create wg directory
+  ansible.builtin.file:
+    path: "/docker/wg/"
+    state: directory
+    owner: "root"
+    group: "root"
+    mode: 0755
+
+- name: Create wg container
+  community.docker.docker_container:
+    name: wireguard
+    image: linuxserver/wireguard
+    restart_policy: unless-stopped
+    pull: true
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv4.conf.all.src_valid_mark: "1"
+    capabilities:
+      - NET_ADMIN
+      - SYS_MODULE
+    state: started
+    env:
+      PASSWORD: "test"
+      SERVERURL: "auto"
+      SERVERPORT: "51820"
+      PEERS: "1"
+      PEERDNS: "auto"
+      ALLOWEDIPS: "0.0.0.0/0"
+    ports:
+      - "51820:51820/udp"
+    volumes:
+      - "/docker/wg/config:/config"

@@ -1,0 +1,28 @@
+---
+# tasks file for code-server
+
+- name: Create code-server directory
+  ansible.builtin.file:
+    path: "/docker/code-server/"
+    state: directory
+    owner: "root"
+    group: "root"
+    mode: 0755
+
+- name: Create code server container
+  community.docker.docker_container:
+    name: code-server
+    image: linuxserver/code-server
+    restart_policy: unless-stopped
+    pull: true
+    state: started
+    env:
+      PASSWORD: "password"
+      DEFAULT_WORKSPACE: "/config/workspace"
+      PUID: "1000"
+      PGID: "1000"
+      SUDO_PASSWORD: "password"
+    ports:
+      - "8443:8443"
+    volumes:
+      - "/docker/code-server/config:/config"

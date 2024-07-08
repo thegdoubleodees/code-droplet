@@ -1,0 +1,111 @@
+---
+# tasks file for guacamole
+
+- name: debug
+  debug: 
+    msg: "{{ droplet_ip }}"
+
+- name: Create volume for guacdb
+  docker_volume:
+    name: db-data
+    state: present
+
+- name: Copy initdb.sql file to host
+  copy:
+    src: initdb.sql
+    dest: /root/initdb.sql
+    mode: '0644'
+
+- name: Create a network for guac services
+  community.docker.docker_network:
+    name: guac_net
+
+- name: Create guac_db
+  community.docker.docker_container:
+    name: guac_db
+    image: mariadb:10.9.5
+    restart_policy: always
+    pull: true
+    state: started
+    env: 
+      MYSQL_ROOT_PASSWORD: 'MariaDBRootPass'
+      MYSQL_DATABASE: 'guacamole_db'
+      MYSQL_USER: 'guacamole_user'
+      MYSQL_PASSWORD: 'MariaDBUserPass'
+    volumes:
+      - ./db-data:/var/lib/mysql
+      - ./initdb.sql:/root/initdb.sql
+    networks:
+      - name: guac_net
+
+- name: Copy .my.cnf file to host
+  copy:
+    src: .my.cnf
+    dest: /root/.my.cnf
+    mode: '0644'
+
+- name: Copy cnf file to guac_db container
+  community.docker.docker_container_copy_into:
+    container: guac_db
+    path: /root/.my.cnf
+    container_path: /.my.cnf
+
+- name: Render the SQL template
+  template:
+    src: connection.sql.j2
+    dest: /tmp/connection.sql
+
+- name: Copy SQL script to container
+  community.docker.docker_container_copy_into:
+    container: guac_db
+    path: /tmp/connection.sql
+    container_path: /root/connection.sql
+
+- name: Run the SQL script to init the db
+  community.docker.docker_container_exec:
+    container: guac_db
+    command: "/bin/sh -c 'cat /root/initdb.sql | mysql --defaults-file=/.my.cnf guacamole_db'"
+  register: sql_out
+  failed_when: "'ERROR' in sql_out.stderr and 'already exists' not in sql_out.stderr"
+
+- name: Run the SQL script to add connections
+  community.docker.docker_container_exec:
+    container: guac_db
+    command: "/bin/sh -c 'cat /root/connection.sql | mysql --defaults-file=/.my.cnf guacamole_db'"
+  register: sql_out
+  failed_when: "'ERROR' in sql_out.stderr and 'already exists' not in sql_out.stderr"
+
+- name: Create guac_d container
+  community.docker.docker_container:
+    name: guac_d
+    image: guacamole/guacd
+    restart_policy: unless-stopped
+    pull: true
+    state: started
+    networks:
+      - name: guac_net
+
+- name: Create guac_web container
+  community.docker.docker_container:
+    name: guac_web
+    image: guacamole/guacamole
+    restart_policy: unless-stopped
+    pull: true
+    state: started
+    env:
+      GUACD_HOSTNAME: "guac_d"
+      MYSQL_HOSTNAME: "guac_db"
+      MYSQL_DATABASE: "guacamole_db"
+      MYSQL_USER: "guacamole_user"
+      MYSQL_PASSWORD: "MariaDBUserPass"
+      TOTP_ENABLED: "false"
+    ports:
+      - 8080:8080
+    networks:
+      - name: guac_net
+
+- name: Add the SSH key to the authorized_keys file
+  authorized_key:
+    user: "root"  # Ensure the key is added for the correct user
+    state: present
+    key: "{{ ssh_pub }}"

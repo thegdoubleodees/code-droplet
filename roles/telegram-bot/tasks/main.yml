@@ -1,0 +1,10 @@
+---
+# tasks file for telegram-bot
+
+- name: Render the SQL template
+  template:
+    src: file-send.py.j2
+    dest: /tmp/file-send.py
+
+- name: Execute Python script
+  command: python3 /tmp/file-send.py

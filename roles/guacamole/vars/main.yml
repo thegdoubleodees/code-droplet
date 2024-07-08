@@ -1,0 +1,11 @@
+---
+# vars file for guacamole
+connection_id: 1
+connection_name: droplet
+protocol: ssh
+private_key: |
+  -----BEGIN RSA PRIVATE KEY-----
+  <enter priv here>
+  -----END RSA PRIVATE KEY-----
+username: root
+ssh_pub: ssh-rsa <enter pub here>

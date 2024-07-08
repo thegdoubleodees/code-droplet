@@ -1,0 +1,76 @@
+- name: create
+  hosts: localhost
+  vars_files:
+    - vars/secrets.yml
+
+  tasks:
+      - block: 
+      
+        - name: Import create
+          import_role:
+            name: create
+
+        - name: Set create fact
+          set_fact:
+            create_var: "{{ create }}"
+        tags: 
+          - deploy
+        
+- name: deploy
+  hosts: droplet
+  vars_files:
+    - vars/secrets.yml
+
+  tasks:
+    - block:
+
+        - name: Import deploy
+          import_role: 
+            name: deploy
+
+      tags:
+        - deploy
+
+- name: containers
+  hosts: droplet
+  vars_files:
+    - vars/secrets.yml
+
+  tasks:
+    - block:
+        - name: Set droplet_ip fact from localhost
+          set_fact:
+            droplet_ip: "{{ hostvars['localhost']['droplet_ip'] }}"
+    
+        - name: Import wireguard
+          import_role: 
+            name: wireguard
+
+        - name: Import file bot
+          import_role:
+            name: telegram-bot
+
+        - name: Import code-server
+          import_role: 
+            name: code-server
+        
+        - name: Import guacamole
+          import_role: 
+            name: guacamole
+            
+      tags:
+        - containers
+
+- name: destroy
+  hosts: localhost
+  vars_files:
+    - vars/secrets.yml
+
+  tasks:
+    - block:
+      
+        - name: Import Destroy
+          import_role:
+            name: destroy
+      tags:
+        - destroy

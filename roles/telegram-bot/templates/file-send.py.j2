@@ -1,0 +1,54 @@
+import logging
+from telegram import Bot
+from telegram.ext import Application
+import os
+import asyncio
+
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+async def send_file(bot: Bot, chat_id: int, file_path: str) -> None:
+    if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
+        logger.error(f"File {file_path} does not exist or is empty.")
+        return
+    
+    logger.info(f"Sending file to Chat ID: {chat_id}")
+
+    with open(file_path, 'rb') as file:
+        await bot.send_message(chat_id=chat_id, text='Droplet: VPN Conf')
+        await bot.send_document(chat_id=chat_id, document=file, message_effect_id=5046509860389126442)
+        await bot.send_message(chat_id=chat_id, text='Droplet: IP - ' + str('{{ droplet_ip }}'))
+        await bot.send_message(chat_id=chat_id, text='Droplet: SSH Web - ' + str('http://' + '{{ droplet_ip }}' + ':8080'))
+        await bot.send_message(chat_id=chat_id, text='Droplet: Code Server Web - ' + str('http://' + '{{ droplet_ip }}' + ':8443'))
+        
+    logger.info("File sent successfully.")
+
+async def main() -> None:
+    # Replace 'YOUR TOKEN HERE' with your bot's API token
+    bot_token = "<bot token here>"
+    
+    # Create the Application and pass it your bot's token
+    application = Application.builder().token(bot_token).build()
+    bot = application.bot
+
+    # Define the chat ID and the file path
+    chat_id = "<enter chat id here>"  # Replace with the target chat ID
+    file_path = '/docker/wg/config/peer1/peer1.conf'  # Replace with your actual file path
+
+    async with application:
+        # Start the bot and send the file
+        await application.initialize()
+        await application.start()
+        await send_file(bot, chat_id, file_path)
+        
+        # Gracefully stop the bot after sending the file
+        await application.stop()
+        await application.shutdown()
+        logger.info("Bot stopped after sending the file.")
+
+if __name__ == '__main__':
+    asyncio.run(main())

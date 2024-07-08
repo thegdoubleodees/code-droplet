@@ -1,0 +1,6 @@
+---
+# tasks file for deploy
+
+  - name: Install Docker on Ubuntu
+    include_tasks: ubuntu_deploy.yml
+    when: ansible_os_family == 'Debian'

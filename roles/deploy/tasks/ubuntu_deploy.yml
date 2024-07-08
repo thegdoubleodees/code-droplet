@@ -1,0 +1,93 @@
+---
+  - name: Wait until the file /tmp/setup.log is present before continuing
+    ansible.builtin.wait_for:
+      path: /tmp/setup.log
+
+  - name: Check if swapfile exists
+    stat:
+      path: /swapfile
+    register: swapfile_results
+
+  - name: debug
+    debug:
+      msg: "{{ swapfile_results.stat.exists }}"
+
+  - block:
+
+    - name: Create a swap file
+      command: fallocate -l 1G /swapfile
+
+    - name: Set the correct permissions on the swap file
+      file:
+        path: /swapfile
+        mode: '0600'
+
+    - name: Format the file as swap
+      command: mkswap /swapfile
+
+    - name: Enable the swap file
+      command: swapon /swapfile
+
+    - name: Add swap file entry to /etc/fstab
+      mount:
+        name: none
+        src: /swapfile
+        fstype: swap
+        opts: sw
+        passno: '0'
+        dump: '0'
+        state: present
+    when: not swapfile_results.stat.exists
+
+  - name: Install Docker dependencies
+    apt:
+      name: 
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - software-properties-common
+      state: present
+
+  - name: Add Docker’s official GPG key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Add Docker repository
+    apt_repository:
+      repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+      state: present
+
+  - name: Update apt package index after adding Docker repo
+    apt:
+      update_cache: yes
+
+  - name: Install Docker dependencies
+    apt:
+      name: 
+        - docker-ce
+        - python3-pip
+      state: present
+
+  - name: Copy a file to a remote host
+    copy:
+      src: pip-requirements.txt  # Local file path
+      dest: /setup/  # Remote file path
+
+  - name: Install pip requirements
+    ansible.builtin.pip:
+      requirements: /setup/pip-requirements.txt
+
+  - name: Ensure Docker service is started and enabled
+    systemd:
+      name: docker
+      state: started
+      enabled: yes
+
+  - name: Create docker directory
+    ansible.builtin.file:
+      path: "/docker"
+      state: directory
+      owner: "root"
+      group: "root"
+      mode: 0755
